@@ -12,41 +12,72 @@
 import aiohttp
 import aiofiles
 import asyncio
+from asyncio import Queue
+
+from datetime import datetime
 
 
 
 urls = [
-    "https://example.com",
-    "https://httpbin.org/status/404",
-    "https://nonexistent.url",
-    "https://example.com",
+    "https://example.com" for _ in range(10)
 ]
 
 
+def check_time(func):
+    def wrapper(*args, **kwargs):
+        start = datetime.now()
+        res = func(*args, **kwargs)
+        print(datetime.now() - start)
+        return res
+    return wrapper
 
 
+
+@check_time
 async def get_status_for_url_or_zero(url: str, session) -> dict:
     data = {}
     try:
         async with session.get(url) as response:
             data.update({"url": url, "status_code": response.status})
+
     except (aiohttp.ClientError, asyncio.TimeoutError):
         data.update({"url": url, "status_code": 0})
 
     return data
 
 
+
+async def consumer_worker(queue, session, f):
+    print("Start consumer worker")
+
+    while True:
+        url = await queue.get()
+        print(url)
+
+        if url is None:
+            print("finish consumer worker")
+            break
+        result = await get_status_for_url_or_zero(url, session)
+        await f.write(f"{result}\n")
+        queue.task_done()
+
+
+
 async def fetch_urls(urls: list[str], file_path: str):
-    semaphore = asyncio.Semaphore(5)
+    queue = Queue()
 
-    async with aiohttp.ClientSession() as session:
-        async with semaphore:
-            result = await asyncio.gather(
-                *(asyncio.create_task(get_status_for_url_or_zero(url, session)) for url in urls)
-            )
+    for url in urls:
+        await queue.put(url)
 
-    async with aiofiles.open(file_path, "w") as f:
-        await asyncio.gather(*(asyncio.create_task(f.write(f"{res_dict}\n")) for res_dict in result))
+    async with aiohttp.ClientSession() as session, aiofiles.open(file_path, "w") as f:
+        tasks = [asyncio.create_task(consumer_worker(queue, session, f)) for _ in range(5)]
+        await queue.join()
+
+    for _ in range(5):
+        await queue.put(None)
+    await asyncio.gather(*tasks)
+
+
 
 
 if __name__ == '__main__':

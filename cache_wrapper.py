@@ -23,7 +23,7 @@ def lru_cache(_func=None, *, maxsize=None):
             res = func(*args, **kwargs)
             cache[func_params] = res
 
-            if maxsize:
+            if isinstance(maxsize, int):
                 if len(cache) >= maxsize:  # если превышен размер кэша, удаляем первый элемент словаря
                     cache.pop(next(iter(cache)))
             return res
