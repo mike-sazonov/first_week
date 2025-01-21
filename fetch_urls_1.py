@@ -9,31 +9,22 @@
 #   (например, 0 для ошибок соединения).
 # - Сохраните все результаты в файл
 
+
+# Вариант fetch_urls для работы с большим количеством входных данных
+
 import aiohttp
 import aiofiles
 import asyncio
 from asyncio import Queue
 
-from datetime import datetime
-
 
 
 urls = [
-    "https://example.com" for _ in range(10)
+    "https://example.com" for _ in range(10000)
 ]
 
 
-def check_time(func):
-    def wrapper(*args, **kwargs):
-        start = datetime.now()
-        res = func(*args, **kwargs)
-        print(datetime.now() - start)
-        return res
-    return wrapper
 
-
-
-@check_time
 async def get_status_for_url_or_zero(url: str, session) -> dict:
     data = {}
     try:
@@ -51,11 +42,9 @@ async def consumer_worker(queue, session, f):
     print("Start consumer worker")
 
     while True:
-        url = await queue.get()
-        print(url)
+        url = await queue.get()     # Получение url из очереди
 
-        if url is None:
-            print("finish consumer worker")
+        if url is None:     # Условие для прерывания цикла воркера
             break
         result = await get_status_for_url_or_zero(url, session)
         await f.write(f"{result}\n")
@@ -67,15 +56,15 @@ async def fetch_urls(urls: list[str], file_path: str):
     queue = Queue()
 
     for url in urls:
-        await queue.put(url)
+        await queue.put(url)    # заполнение очереди
 
     async with aiohttp.ClientSession() as session, aiofiles.open(file_path, "w") as f:
-        tasks = [asyncio.create_task(consumer_worker(queue, session, f)) for _ in range(5)]
-        await queue.join()
+        tasks = [asyncio.create_task(consumer_worker(queue, session, f)) for _ in range(5)]     # создание воркеров
+        await queue.join()  # отмечаем задачу, как выполненную
 
     for _ in range(5):
-        await queue.put(None)
-    await asyncio.gather(*tasks)
+        await queue.put(None)   # добавляем значения None в конец очереди, чтобы потом прервать воркеры
+    await asyncio.gather(*tasks)    # добавляем в цикл воркеров
 
 
 
