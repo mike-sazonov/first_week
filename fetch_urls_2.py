@@ -20,20 +20,17 @@ def parse_json(data):
 
 
 
-
-
-async def get_status_for_url_or_zero(loop, url: str, session) -> dict:
+async def get_status_for_url_or_zero(loop, pool, url: str, session) -> dict:
     data = {}
     try:
         async with session.get(url) as response:
             try:
                 # обработка функции парсинга в отдельном процессе из пула процессов
-                with concurrent.futures.ProcessPoolExecutor() as pool:
-                    _ = await loop.run_in_executor(pool, parse_json, await response.text())
+                res = await loop.run_in_executor(pool, parse_json, await response.text())
             except JSONDecodeError:
                 pass
 
-            data.update({"url": url, "status_code": response.status})
+            data.update({"json": res, "status_code": response.status})
     except (aiohttp.ClientError, asyncio.TimeoutError):
         data.update({"url": url, "status_code": 0})
 
@@ -44,8 +41,10 @@ async def fetch_urls(urls: list[str], file_path: str):
     loop = asyncio.get_running_loop()
 
     async with aiohttp.ClientSession() as session:
+        #   создаём пул процессов
+        with concurrent.futures.ProcessPoolExecutor() as pool:
             result = await asyncio.gather(
-                *(get_status_for_url_or_zero(loop, url, session) for url in urls)
+                *(get_status_for_url_or_zero(loop, pool, url, session) for url in urls)
             )
 
     async with aiofiles.open(file_path, "w") as f:
