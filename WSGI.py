@@ -1,3 +1,8 @@
+# Задача - ASGI / WSGI функция которая проксирует курс валют
+# Приложение должно отдавать курс валюты к доллару используя стороннее АПИ
+# https://api.exchangerate-api.com/v4/latest/{currency}
+
+
 import requests
 import json
 
